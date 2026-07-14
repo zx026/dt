@@ -14,7 +14,8 @@ import numpy as np
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# PyTgCalls import
+# PyTgCalls import - FIXED for version 3.0.0.dev24
+import pytgcalls
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 
