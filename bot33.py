@@ -14,18 +14,19 @@ import numpy as np
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# PyTgCalls import - FIXED for version 3.0.0.dev24
-import pytgcalls
+# PyTgCalls import
 from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 
 # ═══════════════════════════════════════════════════
-# CONFIGURATION - CHANGE THESE
+# CONFIGURATION - YAHAN CHANGE KAREIN
 # ═══════════════════════════════════════════════════
 
 BOT_TOKEN = "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ"
 OWNER_ID = 7302427268
-SESSION_STRING = "BQAN3s...apna_session_string..."  # 🔴 CHANGE THIS!
+
+# 🔴🔴🔴 YAHAN APNA SESSION_STRING DAALO 🔴🔴🔴
+SESSION_STRING = "BQAN3s...apna_session_string..."
 
 AUDIO_DURATION = 20
 AUDIO_AMPLITUDE = 0.95
