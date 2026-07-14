@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Telegram VC Disruptor — Bot Controlled 🤖
-Authorized Penetration Testing Tool
 
 Commands:
   /start - Show available commands
@@ -526,8 +524,8 @@ async def reset_cmd(client, message: Message):
 async def main():
     print(r"""
     ╔══════════════════════════════════════════════════════════════╗
-    ║   Telegram VC Disruptor — BOT CONTROLLED 🤖                 ║
-    ║   Bot se command do -> Attack ho jaye                       ║
+    ║                    ║
+    ║   Bot se command do ->                      ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
